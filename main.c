@@ -10,6 +10,8 @@
 
 // Modified SVG export function to include Voronoi edges
 void exportStipplesToSVG(const char* filename, StippleList* stipples, int imageWidth, int imageHeight, float dotRadius, FloatImage* image) {
+    printf("%s\t%d\n", filename, stipples->count);
+    
     // Open the file for writing
     FILE* file = fopen(filename, "w");
     if (!file) {
@@ -33,16 +35,24 @@ void exportStipplesToSVG(const char* filename, StippleList* stipples, int imageW
     if (diagram) {
         // Draw Voronoi edges
         fprintf(file, "  <!-- Voronoi edges -->\n");
-        fprintf(file, "  <g stroke=\"blue\" stroke-width=\"0.5\" opacity=\"0.7\">\n");
-        
+        fprintf(file, "  <g stroke=\"red\" stroke-width=\"1\" fill=\"none\" opacity=\"0.7\">\n");
+    
         for (int i = 0; i < diagram->edgeCount; i++) {
-            VoronoiEdge edge = diagram->edges[i];
-            fprintf(file, "    <line x1=\"%.2f\" y1=\"%.2f\" x2=\"%.2f\" y2=\"%.2f\"/>\n",
-                    edge.startX, edge.startY, edge.endX, edge.endY);
+            VoronoiEdge path = diagram->edges[i];
+    
+            if (path.length < 2) continue; // Skip too-short paths
+    
+            fprintf(file, "    <polyline points=\"");
+    
+            for (int j = 0; j < path.length; j++) {
+                fprintf(file, "%.2f,%.2f ", (float)path.points[j].x, (float)path.points[j].y);
+            }
+    
+            fprintf(file, "\"/>\n");
         }
-        
+    
         fprintf(file, "  </g>\n");
-        
+    
         // Free diagram when done
         free_voronoi_diagram(diagram);
     }
