@@ -24,8 +24,8 @@ typedef struct
 } VoronoiCell;
 typedef struct
 {
-    float startX, startY; // Start point of the edge
-    float endX, endY;     // End point of the edge
+    StipplePoint *points;
+    int length;
 } VoronoiEdge;
 
 typedef struct
@@ -35,18 +35,6 @@ typedef struct
     VoronoiEdge *edges; // Array of edges
     int edgeCount;      // Number of edges
 } VoronoiDiagram;
-
-typedef struct
-{
-    double x;
-    double y;
-} Point;
-
-typedef struct
-{
-    Point p1;
-    Point p2;
-} Edge;
 
 typedef struct
 {
@@ -169,90 +157,87 @@ bool is_voronoi_edge(int x, int y, FloatImage *image, StippleList *stipples)
 
 // Function to trace a continuous edge path starting from a given pixel
 // Returns the number of segments added
-int trace_edge_path(bool **edge_map, int x, int y, int width, int height,
-                    VoronoiEdge *edges, int *edge_count, int max_edges)
+
+int trace_edge_path(
+    bool **edge_map,
+    int x, int y,
+    int width, int height,
+    VoronoiEdge *paths, int *path_count,
+    int max_paths, int max_path_length
+)
 {
-    // Direction arrays for checking neighboring pixels (8-connectivity)
     const int dx[] = {-1, 0, 1, -1, 1, -1, 0, 1};
     const int dy[] = {-1, -1, -1, 0, 0, 1, 1, 1};
 
-    int segments_added = 0;
+    if (*path_count >= max_paths)
+        return 0;
+
+    StipplePoint *path = malloc(sizeof(StipplePoint) * max_path_length);
+    if (!path)
+        return 0;
+
+    int length = 0;
     int current_x = x;
     int current_y = y;
-    int start_x = x;
-    int start_y = y;
 
-    // Mark the starting pixel as visited
     edge_map[current_y][current_x] = false;
+    path[length++] = (StipplePoint){x, y};
 
-    // Keep track of the path
-    int path_length = 1;
-    int min_path_length = 5; // Minimum length for a significant edge
+    int last_dx = 0;
+    int last_dy = 0;
 
-    // Try to follow the edge in a continuous path
-    bool found_next = false;
-
-    do
+    while (length < max_path_length)
     {
-        found_next = false;
+        int best_score = -1;
+        int best_dir = -1;
 
-        // Check all 8 neighbors
         for (int d = 0; d < 8; d++)
         {
             int nx = current_x + dx[d];
             int ny = current_y + dy[d];
 
-            // Skip if outside boundaries
             if (nx < 0 || nx >= width || ny < 0 || ny >= height)
-            {
                 continue;
-            }
 
-            // If this neighbor is an unvisited edge pixel, continue the path
-            if (edge_map[ny][nx])
+            if (!edge_map[ny][nx])
+                continue;
+
+            // Direction scoring: prefer directions matching last move
+            int score = 0;
+            if (length > 1)
+                score = dx[d] * last_dx + dy[d] * last_dy; // dot product
+
+            if (score > best_score)
             {
-                // If the path is getting long, add a segment and continue
-                if (path_length >= min_path_length)
-                {
-                    if (*edge_count < max_edges)
-                    {
-                        edges[*edge_count].startX = start_x;
-                        edges[*edge_count].startY = start_y;
-                        edges[*edge_count].endX = current_x;
-                        edges[*edge_count].endY = current_y;
-                        (*edge_count)++;
-                        segments_added++;
-                    }
-
-                    // Start a new segment
-                    start_x = current_x;
-                    start_y = current_y;
-                    path_length = 1;
-                }
-
-                // Continue to the next pixel
-                edge_map[ny][nx] = false; // Mark as visited
-                current_x = nx;
-                current_y = ny;
-                path_length++;
-                found_next = true;
-                break;
+                best_score = score;
+                best_dir = d;
             }
         }
-    } while (found_next);
 
-    // Add the final segment if it's significant
-    if (path_length >= min_path_length && *edge_count < max_edges)
-    {
-        edges[*edge_count].startX = start_x;
-        edges[*edge_count].startY = start_y;
-        edges[*edge_count].endX = current_x;
-        edges[*edge_count].endY = current_y;
-        (*edge_count)++;
-        segments_added++;
+        if (best_dir == -1)
+            break;
+
+        current_x += dx[best_dir];
+        current_y += dy[best_dir];
+        edge_map[current_y][current_x] = false;
+
+        last_dx = dx[best_dir];
+        last_dy = dy[best_dir];
+
+        path[length++] = (StipplePoint){current_x, current_y};
     }
 
-    return segments_added;
+    // Save the full path if it has enough points
+    if (length >= 5)
+    {
+        paths[*path_count].points = path;
+        paths[*path_count].length = length;
+        (*path_count)++;
+        return 1;
+    }
+
+    free(path);
+    return 0;
 }
 
 // Modified function to compute Voronoi diagram with optimized edges
@@ -365,8 +350,10 @@ VoronoiDiagram *compute_voronoi_with_edges(FloatImage *image, StippleList *stipp
         {
             if (edge_map[y][x])
             {
-                trace_edge_path(edge_map, x, y, image->width, image->height,
-                                diagram->edges, &diagram->edgeCount, max_edges);
+                trace_edge_path(edge_map, x, y,
+                    image->width, image->height,
+                    diagram->edges, &diagram->edgeCount,
+                    100000, 100000);
             }
         }
     }
