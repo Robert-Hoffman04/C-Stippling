@@ -18,6 +18,7 @@ typedef struct
 
 typedef struct
 {
+    int pixelCount;
     float sumDensity;
     StipplePoint centroid;
     // Optionally include geometry info
@@ -288,6 +289,7 @@ VoronoiDiagram *compute_voronoi_with_edges(FloatImage *image, StippleList *stipp
             // Assign pixel to the closest stipple point's cell
             VoronoiCell *cell = &diagram->cells[closest_stipple];
             cell->sumDensity += image->data[y * image->width + x];
+            cell->pixelCount++;
             cell->centroid.x += x * image->data[y * image->width + x];
             cell->centroid.y += y * image->data[y * image->width + x];
         }
